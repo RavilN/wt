@@ -2,21 +2,21 @@
 #include "Wt/Auth/FacebookService"
 #include "Wt/Json/Object"
 #include "Wt/Json/Parser"
+#include "Wt/Json/Serializer";
 #include "Wt/Http/Client"
 
 #define ERROR_MSG(e) WString::tr("Wt.Auth.FacebookService." e)
 
 namespace {
   const char *RedirectEndpointProperty = "facebook-oauth2-redirect-endpoint";
-  const char *RedirectEndpointPathProperty = "facebook-oauth2-redirect"
-    "-endpoint-path";
+  const char *RedirectEndpointPathProperty = "facebook-oauth2-redirect-endpoint-path";
   const char *ClientIdProperty = "facebook-oauth2-app-id";
   const char *ClientSecretProperty = "facebook-oauth2-app-secret";
 
   const char *AuthUrl = "https://www.facebook.com/dialog/oauth";
   const char *TokenUrl = "https://graph.facebook.com/oauth/access_token";
 
-  const char *EmailScope = "email";
+  const char *DefaultScopeOfPermissions = "public_profile,email";
 }
 
 namespace Wt {
@@ -28,9 +28,12 @@ LOGGER("Auth.FacebookService");
 class FacebookProcess : public OAuthProcess
 {
 public:
-  FacebookProcess(const FacebookService& auth, const std::string& scope)
+  FacebookProcess(const FacebookService& auth, const std::string& scope, const std::string& fields, bool returnJsonInNameFieldOfIdentity)
     : OAuthProcess(auth, scope)
-  { }
+  { 
+    this->fields = fields;
+    this->returnJsonInNameFieldOfIdentity = returnJsonInNameFieldOfIdentity;
+  }
 
   virtual void getIdentity(const OAuthAccessToken& token)
   {
@@ -40,7 +43,10 @@ public:
 
     client->done().connect
       (boost::bind(&FacebookProcess::handleMe, this, _1, _2));
-    client->get("https://graph.facebook.com/me?access_token=" + token.value());
+    std::string requestUrl = "https://graph.facebook.com/me?fields=";
+    requestUrl += fields;
+    requestUrl += "&access_token=" + token.value();
+    client->get(requestUrl);
 
 #ifndef WT_TARGET_JAVA
     WApplication::instance()->deferRendering();
@@ -69,35 +75,49 @@ private:
 #endif
 
       if (!ok) {
-	LOG_ERROR("could not parse Json: '" << response.body() << "'");
-	setError(ERROR_MSG("badjson"));
-	authenticated().emit(Identity::Invalid);
+	      LOG_ERROR("could not parse Json: '" << response.body() << "'");
+	      setError(ERROR_MSG("badjson"));
+	      authenticated().emit(Identity::Invalid);
       } else {
-	std::string id = me.get("id");
-	WT_USTRING userName = me.get("name");
-	std::string email = me.get("email");
-	bool emailVerified = me.get("verified").orIfNull(false);
+        
+        std::string id = me.get("id");
+        std::string email = me.get("email");
+        bool emailVerified = me.get("verified").orIfNull(false);
 
-	authenticated().emit(Identity(service().name(), id, userName,
-				      email, emailVerified));
+        if (returnJsonInNameFieldOfIdentity) {
+          authenticated().emit(Identity(service().name(), id, Json::serialize(me), email, emailVerified));
+        }
+        else {
+          WT_USTRING userName = me.get("name");
+          authenticated().emit(Identity(service().name(), id, userName, email, emailVerified));
+        }
       }
     } else {
       if (!err) {
-	LOG_ERROR("user info request returned: " << response.status());
-	LOG_ERROR("with: " << response.body());
+	      LOG_ERROR("user info request returned: " << response.status());
+	      LOG_ERROR("with: " << response.body());
       } else
-	LOG_ERROR("handleMe(): " << err.message());
+	      LOG_ERROR("handleMe(): " << err.message());
 
       setError(ERROR_MSG("badresponse"));
 
       authenticated().emit(Identity::Invalid);
     }
   }
+  std::string fields;
+  bool returnJsonInNameFieldOfIdentity;
 };
 
-FacebookService::FacebookService(const AuthService& baseAuth)
+FacebookService::FacebookService(const AuthService& baseAuth, const std::string& fields, bool returnJsonInNameFieldOfIdentity)
   : OAuthService(baseAuth)
-{ }
+{ 
+  this->scope = DefaultScopeOfPermissions;
+  if (!fields.empty())
+  {
+    this->fields = fields;
+  }
+  this->returnJsonInNameFieldOfIdentity = returnJsonInNameFieldOfIdentity;
+}
 
 bool FacebookService::configured()
 {
@@ -126,8 +146,13 @@ WString FacebookService::description() const
 
 std::string FacebookService::authenticationScope() const
 {
-  return EmailScope;
+  return scope;
 }
+void FacebookService::setAuthenticationScope(const std::string& scope)
+{
+  this->scope = scope;
+}
+
 
 int FacebookService::popupWidth() const
 {
@@ -180,7 +205,7 @@ Http::Method FacebookService::tokenRequestMethod() const
 
 OAuthProcess *FacebookService::createProcess(const std::string& scope) const
 {
-  return new FacebookProcess(*this, scope);
+  return new FacebookProcess(*this, scope, fields, returnJsonInNameFieldOfIdentity);
 }
 
   }

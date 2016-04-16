@@ -343,11 +343,13 @@ protected:
   virtual WFormWidget *createFormWidget(AuthModel::Field field);
 
   virtual void render(WFlags<RenderFlag> flags);
-
-private:
+  virtual void updatePasswordLoginView();
+protected: //OWA
   AuthModel *model_;
   RegistrationModel *registrationModel_;
   Login& login_;
+  virtual void oAuthDone(OAuthProcess *process, const Identity& identity);
+private:
   std::string basePath_;
   bool registrationEnabled_;
 
@@ -363,8 +365,7 @@ private:
   bool handleRegistrationPath(const std::string& path);
 
   void oAuthStateChange(OAuthProcess *process);
-  void oAuthDone(OAuthProcess *process, const Identity& identity);
-  void updatePasswordLoginView();
+  
 };
 
   }

@@ -1,0 +1,101 @@
+// This may look like C code, but it's really -*- C++ -*-
+/*
+ * Copyright (C) 2016 Emweb bvba, Kessel-Lo, Belgium.
+ *
+ * See the LICENSE file for terms of use.
+ */
+#ifndef WT_AUTH_LinkedIn_AUTH_H_
+#define WT_AUTH_LinkedIn_AUTH_H_
+
+#include <Wt/Auth/OAuthService>
+
+namespace Wt {
+  namespace Auth {
+
+/*! \brief %OAuth service for LinkedIn as third-party authenticator.
+ *
+ * The configuration of the service is done using properties, whose
+ * values need to match the values configured at Facebook.
+ *
+ * - <tt>linkedin-oauth2-redirect-endpoint</tt>: the URL of the local
+ *   redirect endpoint, to which the LinkedIn OAuth service redirects the user
+ *   after authentication. See also redirectEndpoint()
+ * - <tt>linkedin-oauth2-client-id</tt>: The client ID
+ * - <tt>linkedin-oauth2-client-secret</tt>: The client secret.
+ *
+ * For example:
+ * \code
+ * <properties>
+ *   <property name="linkedin-oauth2-redirect-endpoint">
+ *     http://yourhostname.com:8080/oauth2callbackL
+ *   </property>
+ *   <property name="linkedin-oauth2-client-id">
+ *     1234567890123456
+ *   </property>
+ *   <property name="linkedin-oauth2-client-secret">
+ *     a3cf1630b1ae415c7260d849efdf444d
+ *   </property>
+ * </properties>
+ * \endcode
+ *
+ * Like all <b>service classes</b>, this class holds only
+ * configuration state. Thus, once configured, it can be safely shared
+ * between multiple sessions since its state (the configuration) is
+ * read-only. 
+ * \if cpp
+ * A "const LinkedInService" object is thus thread-safe.
+ * \endif
+ *
+ * \if cpp
+ * \sa https://developer.linkedin.com/docs/rest-api
+ * \elseif java
+ * See also: https://developer.linkedin.com/docs/rest-api
+ * \endif
+ *
+ * \if cpp
+ * \note For FastCGI, see also additional configuration in OAuthService
+ * \endif
+ *
+ * \ingroup auth
+ */
+  class WT_API LinkedInService : public OAuthService
+  {
+  public:
+    /*! \brief Constructor.
+     * arg getUserProfileAsJson:
+     *    false - Identuty object's name is set to "firstName lastName".
+     *    true - Identity object's name will have user information in JSON format as it is received from LinkedIn.
+     */
+    LinkedInService(const AuthService& baseAuthService, bool returnJsonInNameFieldOfIdentity = false);
+
+    /*! \brief Checks whether a FacebookAuth service is properly configured.
+     *
+     * This returns \c true if a value is found for the three
+     * configuration properties.
+     */
+    static bool configured();
+
+    virtual std::string name() const;
+    virtual WString description() const;
+    virtual int popupWidth() const;
+    virtual int popupHeight() const;
+
+    virtual std::string authenticationScope() const;
+    virtual std::string redirectEndpoint() const;
+    virtual std::string authorizationEndpoint() const;
+    virtual std::string tokenEndpoint() const;
+    virtual std::string clientId() const;
+    virtual std::string clientSecret() const;
+
+    virtual Http::Method tokenRequestMethod() const;
+    virtual OAuthProcess *createProcess(const std::string& scope) const;
+  protected:
+    int popupDialogWidth;
+    int popupDialogHeight;
+    bool getUserProfileAsJson;
+  };
+
+  }
+}
+
+#endif // WT_AUTH_FACEBOOK_AUTH_H_

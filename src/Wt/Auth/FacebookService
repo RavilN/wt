@@ -65,8 +65,16 @@ class WT_API FacebookService : public OAuthService
 {
 public:
   /*! \brief Constructor.
+   * param fields - defines what fields from user profile to return;
+   * param returnJsonInNameFieldOfIdentity - defines what return in the name field of the Identity.
+   *    false - full name of the user;
+   *    true - whole response body in JSON format, which then should be parsed by the caller. 
+   *      It is expected that wider scope of permissions and more than just default fields are requested so it makes sense to return them in JSON format using existing field name in Identity object
+   * refer to the API docs for details about fields and format: https://developers.facebook.com/docs/graph-api    
+   * Note that scope of premissions should be set properly (by calling setAuthenticationScope method after creation of the FacebookService object) 
+   * in order to return required fields.
    */
-  FacebookService(const AuthService& baseAuthService);
+  FacebookService(const AuthService& baseAuthService, const std::string& fields = "id,name,email,verified,first_name,last_name", bool returnJsonInNameFieldOfIdentity = false);
 
   /*! \brief Checks whether a FacebookAuth service is properly configured.
    *
@@ -81,6 +89,10 @@ public:
   virtual int popupHeight() const;
 
   virtual std::string authenticationScope() const;
+  //Sets comma separated list of permissions.
+  // Example: "public_profile,email,user_location"
+  virtual void setAuthenticationScope(const std::string& scope);
+
   virtual std::string redirectEndpoint() const;
   virtual std::string redirectEndpointPath() const;
   virtual std::string authorizationEndpoint() const;
@@ -90,6 +102,11 @@ public:
 
   virtual Http::Method tokenRequestMethod() const;
   virtual OAuthProcess *createProcess(const std::string& scope) const;
+
+protected:
+  std::string scope; //Comma separated list of permissions the applicatoin is requiring to get for a user from Facebook
+  std::string fields;
+  bool returnJsonInNameFieldOfIdentity;
 };
 
   }
