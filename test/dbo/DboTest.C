@@ -687,7 +687,7 @@ BOOST_AUTO_TEST_CASE( dbo_test3 )
      * implemented this so that this kind of things simply work !
      */
     dbo::collection<std::string> names
-      = session_->query<std::string>("select \"name\" from \"table_b\"");
+      = session_->query<std::string>("select \"name\" from " SCHEMA "\"table_b\"");
 
     for (dbo::collection<std::string>::const_iterator i = names.begin();
 	 i != names.end(); ++i)
@@ -698,10 +698,10 @@ BOOST_AUTO_TEST_CASE( dbo_test3 )
     dbo::Transaction t(*session_);
 
     dbo::ptr<B> b1 = session_->query< dbo::ptr<B> >
-      ("select distinct B from \"table_b\" B ").where("B.\"name\" = ?").bind("b1");
+      ("select distinct B from " SCHEMA "\"table_b\" B ").where("B.\"name\" = ?").bind("b1");
 
     std::size_t count = session_->query< dbo::ptr<B> >
-      ("select distinct B from \"table_b\" B ").where("B.\"name\" = ?").bind("b1")
+      ("select distinct B from " SCHEMA "\"table_b\" B ").where("B.\"name\" = ?").bind("b1")
       .resultList().size();
 
     dbo::ptr<C> c1 = session_->find<C>().where("\"name\" = ?").bind("c1");
@@ -801,7 +801,7 @@ BOOST_AUTO_TEST_CASE( dbo_test4 )
 #if !defined(FIREBIRD) && !defined(MYSQL)
     dbo::Query<BA> q = session_->query<BA>
       ("select B, A "
-       "from \"table_b\" B join \"table_a\" A on A.\"b_id\" = B.\"id\"")
+       "from " SCHEMA "\"table_b\" B join " SCHEMA "\"table_a\" A on A.\"b_id\" = B.\"id\"")
       .orderBy("A.\"i\"");
 
     std::vector<dbo::FieldInfo> fields = q.fields();
@@ -909,7 +909,7 @@ BOOST_AUTO_TEST_CASE( dbo_test4b )
 #if !defined(FIREBIRD) && !defined(MYSQL)
     dbo::Query<ABC> q = session_->query<ABC>
       ("select A, B, C " 
-       "from \"table_a\" A join \"table_b\" B on (A.\"b_id\" = B.\"id\") join \"table_c\" C on (C.\"b2_id\" = B.\"id\")")
+       "from " SCHEMA "\"table_a\" A join " SCHEMA "\"table_b\" B on (A.\"b_id\" = B.\"id\") join " SCHEMA "\"table_c\" C on (C.\"b2_id\" = B.\"id\")")
         .orderBy("A.\"id\"");
 
     C_ABCs c_abcs = q.resultList();
@@ -1028,9 +1028,9 @@ BOOST_AUTO_TEST_CASE( dbo_test4c )
 #if !defined(FIREBIRD) && !defined(MYSQL)
     dbo::Query<ABC> q = session_->query<ABC>
       ("select A, B, C "
-       "from \"table_a\" A "
-       "left join \"table_b\" B on A.\"b_id\" = B.\"id\" "
-       "left join \"table_c\" C on A.\"table_c_id\" = C.\"id\"")
+       "from " SCHEMA "\"table_a\" A "
+       "left join " SCHEMA "\"table_b\" B on A.\"b_id\" = B.\"id\" "
+       "left join " SCHEMA "\"table_c\" C on A.\"" SCHEMA "table_c_id\" = C.\"id\"")
       .orderBy("A.\"id\"");
 
     C_ABCs c_abcs = q.resultList();
@@ -1216,7 +1216,7 @@ BOOST_AUTO_TEST_CASE( dbo_test7 )
     int id1, id2;
 
     boost::tie(id1, id2) = session_->query<boost::tuple<int, int> >
-      ("select \"id\", \"id\" from \"table_a\"").resultValue();
+      ("select \"id\", \"id\" from " SCHEMA "\"table_a\"").resultValue();
 
     BOOST_REQUIRE(id1 == aId);
     BOOST_REQUIRE(id2 == aId);
@@ -1225,7 +1225,7 @@ BOOST_AUTO_TEST_CASE( dbo_test7 )
     dbo::ptr<A> a;
     int id;
     boost::tie(a, id) = session_->query<boost::tuple<dbo::ptr<A>, int> >
-      ("select (a), a.\"id\" from \"table_a\" a").resultValue();
+      ("select (a), a.\"id\" from " SCHEMA "\"table_a\" a").resultValue();
 
     BOOST_REQUIRE(id == aId);
     BOOST_REQUIRE(a.id() == aId);
@@ -1242,7 +1242,7 @@ BOOST_AUTO_TEST_CASE( dbo_test8 )
   {
     dbo::Transaction t(*session_);
 
-    session_->execute("delete from \"table_a\"");
+    session_->execute("delete from " SCHEMA "\"table_a\"");
   }
 }
 
@@ -1562,7 +1562,7 @@ BOOST_AUTO_TEST_CASE( dbo_test13 )
     {
       dbo::collection<dbo::ptr<B> > c;
       c = session_->query< dbo::ptr<B> >
-	("select B from \"table_b\" B ")
+	("select B from " SCHEMA "\"table_b\" B ")
 	.where("B.\"state\" = ?").orderBy("B.\"name\"")
 	.limit(1).bind(0);
 
@@ -1570,7 +1570,7 @@ BOOST_AUTO_TEST_CASE( dbo_test13 )
     }
 
     dbo::ptr<B> d = session_->query< dbo::ptr<B> >
-      ("select B from \"table_b\" B ")
+      ("select B from " SCHEMA "\"table_b\" B ")
       .where("B.\"state\" = ?").orderBy("B.\"name\"")
       .limit(1).bind(0);
 
@@ -1651,7 +1651,7 @@ BOOST_AUTO_TEST_CASE( dbo_test15 )
 
     {
       dbo::collection<dbo::ptr<A> > c = session_->query< dbo::ptr<A> >
-	("select A from \"table_a\" A ").where("\"b_id\" = ?").bind(b);
+	("select A from " SCHEMA "\"table_a\" A ").where("\"b_id\" = ?").bind(b);
 
       BOOST_REQUIRE(c.size() == 1);
     }
@@ -1970,7 +1970,7 @@ BOOST_AUTO_TEST_CASE( dbo_test22c )
 
   {
     dbo::Transaction t(*session_);
-    session_->execute("ALTER TABLE table_a ALTER COLUMN datetime "
+    session_->execute("ALTER TABLE " SCHEMA "table_a ALTER COLUMN datetime "
         "TYPE TIMESTAMP WITH TIME ZONE" );
     session_->execute("SET TIME ZONE \"America/New_York\"");
 
@@ -2001,7 +2001,7 @@ BOOST_AUTO_TEST_CASE( dbo_test22d )
 
   {
     dbo::Transaction t(*session_);
-    session_->execute("ALTER TABLE table_a ALTER COLUMN datetime "
+    session_->execute("ALTER TABLE " SCHEMA "table_a ALTER COLUMN datetime "
         "TYPE TIMESTAMP WITH TIME ZONE" );
     session_->execute("SET TIME ZONE \"Europe/Brussels\"");
 
@@ -2153,7 +2153,7 @@ BOOST_AUTO_TEST_CASE( dbo_test24a )
 
     typedef dbo::ptr_tuple<E, C>::type EC;
     EC ec = session_->query< EC >
-      ("select E, C from \"table_e\" E, \"table_c\" C");
+      ("select E, C from  " SCHEMA "\"table_e\" E, " SCHEMA "\"table_c\" C");
 
     BOOST_REQUIRE(ec.get<0>()->name == "e1");
     BOOST_REQUIRE(ec.get<1>()->name == "c1");
@@ -2173,8 +2173,8 @@ BOOST_AUTO_TEST_CASE( dbo_test24b )
 
     typedef dbo::ptr_tuple<E, E>::type EE;
     EE ee = session_->query< EE >
-      ("select \"E1\", \"E2\" from \"table_e\" \"E1\" "
-       "right join \"table_e\" \"E2\" on \"E1\".\"id\" != \"E2\".\"id\"");
+      ("select \"E1\", \"E2\" from " SCHEMA "\"table_e\" \"E1\" "
+       "right join " SCHEMA "\"table_e\" \"E2\" on \"E1\".\"id\" != \"E2\".\"id\"");
 
     BOOST_REQUIRE(ee.get<1>()->name == "e1");
   }
@@ -2195,7 +2195,7 @@ BOOST_AUTO_TEST_CASE( dbo_test24c )
 
     typedef dbo::ptr_tuple<D, C>::type DC;
     DC dc = session_->query< DC >
-      ("select D, C from \"table_d\" D, \"table_c\" C");
+      ("select D, C from " SCHEMA "\"table_d\" D, " SCHEMA "\"table_c\" C");
 
     BOOST_REQUIRE(dc.get<0>()->name == "d1");
     BOOST_REQUIRE(dc.get<1>()->name == "c1");
@@ -2315,4 +2315,121 @@ BOOST_AUTO_TEST_CASE( dbo_test25 )
     delete model;
   }
 #endif // FIREBIRD
+}
+
+BOOST_AUTO_TEST_CASE( dbo_test26 )
+{
+#ifndef SQLITE3  // sqlite3 ":memory:" does not share database between sessions
+  DboFixture f;
+
+  dbo::Session *session_ = f.session_;
+
+  struct CheckExpected : Wt::WObject {
+    DboFixture& f_;
+    dbo::Session *session2_;
+
+    CheckExpected(DboFixture &f) : f_(f) {
+      session2_ = new dbo::Session();
+      session2_->setConnectionPool(*f_.connectionPool_);
+      session2_->mapClass<F>(SCHEMA "table_f");
+    }
+
+    virtual ~CheckExpected() {
+      delete session2_;
+    }
+
+    bool operator() (std::string &expected) {
+      {
+        dbo::Transaction t2(*session2_);
+        dbo::ptr<F> c = session2_->find<F>();
+        if (c->firstName != expected)
+          BOOST_ERROR(std::string("CheckExpected: firstName != expected, firstName: '") +
+              c->firstName + "', expected: '" + expected + "'");
+        else
+          BOOST_TEST_MESSAGE(std::string("CheckExpected OK: firstName: '") +
+              c->firstName + "', expected: '" + expected + "'");
+      }
+      return true;
+    }
+  } checkExpected(f);
+
+  {
+    dbo::Transaction t(*session_);
+
+    session_->add(new F("Alice",  "Kramden", "Female"));
+
+    dbo::Query< dbo::ptr<F> > query = session_->find<F>();
+    dbo::QueryModel< dbo::ptr<F> > *model
+      = new dbo::QueryModel< dbo::ptr<F> >();
+
+    model->setQuery(query);
+    model->addAllFieldsAsColumns();
+
+    BOOST_REQUIRE(model->columnCount() == 5);
+    BOOST_REQUIRE(model->rowCount() == 1);
+    t.commit();
+
+    BOOST_REQUIRE(Wt::asString(model->data(0, 2)) == "Alice");
+
+    std::string ExpectedFirstName = "Alice";
+    BOOST_REQUIRE(checkExpected(ExpectedFirstName));
+
+    /*
+     * Set-up a handler to verify that updates are visible
+     * in a second session when model->dataChanged() is emitted
+     */
+    model->dataChanged().connect(boost::bind<bool>(boost::ref(checkExpected),
+          boost::ref(ExpectedFirstName)));
+
+    /*
+     * The setItemData() convenience method commits
+     * a transaction prior to emitting dataChanged()
+     */
+    ExpectedFirstName = "AliceTwo";
+    Wt::WAbstractItemModel::DataMap map;
+    map[Wt::EditRole] = ExpectedFirstName;
+    model->setItemData(model->index(0, 2), map);  // checkExpected() will be called
+
+    BOOST_REQUIRE(Wt::asString(model->data(0, 2)) == ExpectedFirstName);
+
+    /*
+     * The setData() should be equivalent to above setItemData() and
+     * commit a transaction prior to emitting dataChanged()
+     */
+    ExpectedFirstName = "AliceThree";
+    model->setData(0, 2, ExpectedFirstName);  // checkExpected() will be called
+
+    BOOST_REQUIRE(Wt::asString(model->data(0, 2)) == ExpectedFirstName);
+
+    delete model;
+  }
+#endif // SQLITE3
+}
+
+BOOST_AUTO_TEST_CASE( dbo_test27 )
+{
+#ifdef MYSQL
+  /* Allegedly fails, see #4734 */
+  DboFixture f;
+
+  dbo::Session *session_ = f.session_;
+
+  {
+    dbo::Transaction t(*session_);
+
+    dbo::ptr<B> b(new B());
+    b.modify()->name = "b";
+    session_->add(b);
+  }
+
+  {
+    dbo::Transaction t(*session_);
+
+    /* The count fails ! */
+
+    std::string auth = session_->query<std::string>
+      ("select sha1(?) from " SCHEMA "\"table_b\" where \"name\"=?")
+      .bind("shhhh").bind("b");
+  }
+#endif
 }

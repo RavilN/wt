@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "Wt/WException"
+#include "Wt/WLocalDateTime"
 #include "Wt/WTime"
 #include "Wt/WLogger"
 
@@ -148,9 +149,14 @@ bool WTime::operator>= (const WTime& other) const
   return other <= *this;
 }
 
+WTime WTime::currentTime()
+{
+  return WLocalDateTime::currentDateTime().time();
+}
+
 WTime WTime::currentServerTime()
 {
-  return WTime((long)boost::posix_time::microsec_clock::universal_time()
+  return WTime((long)boost::posix_time::microsec_clock::local_time()
                .time_of_day().total_milliseconds());
 }
 
@@ -482,7 +488,7 @@ WTime::WTime(long t)
 
 WTime::RegExpInfo WTime::formatHourToRegExp(WTime::RegExpInfo& result,
 					    const std::string& format,
-					    unsigned& i)
+                        unsigned& i, int& currentGroup)
 {
   /* Possible values */
   /* h, hh, H, HH */
@@ -505,7 +511,7 @@ WTime::RegExpInfo WTime::formatHourToRegExp(WTime::RegExpInfo& result,
   }
   
   if (sf == "HH" || (sf == "hh" && !ap)) { //Hour with leading 0 0-23
-    result.regexp += "(([0-1][0-9])|([2][0-3]))";
+    result.regexp += "([0-1][0-9]|[2][0-3])";
   } else if (sf == "hh" && ap) {          //Hour with leading 0 01-12
     result.regexp += "(0[1-9]|[1][012])";
   } else if (sf == "H" || (sf == "h" && !ap)) { //Hour without leading 0 0-23
@@ -513,13 +519,14 @@ WTime::RegExpInfo WTime::formatHourToRegExp(WTime::RegExpInfo& result,
   } else if (sf == "h" && ap) {                  //Hour without leading 0 0-12
     result.regexp += "([1-9]|1[012])";
   }
-
+  result.hourGetJS = "return parseInt(results["
+          + boost::lexical_cast<std::string>(currentGroup++) + "], 10);";
   return result;
 }
 
 WTime::RegExpInfo WTime::formatMinuteToRegExp(WTime::RegExpInfo& result,
 					      const std::string& format,
-					      unsigned& i)
+                          unsigned& i, int& currentGroup)
 {
   char next = -1;
   std::string sf;
@@ -538,12 +545,15 @@ WTime::RegExpInfo WTime::formatMinuteToRegExp(WTime::RegExpInfo& result,
   else /* Minutes with leading 0 */
     result.regexp += "([0-5][0-9])";
 
+  result.minuteGetJS = "return parseInt(results["
+          + boost::lexical_cast<std::string>(currentGroup++) + "], 10);";
+
   return result;
 }
 
 WTime::RegExpInfo WTime::formatSecondToRegExp(WTime::RegExpInfo& result,
 					      const std::string& format,
-					      unsigned& i)
+                          unsigned& i, int& currentGroup)
 {
   char next = -1;
   std::string sf;
@@ -563,12 +573,15 @@ WTime::RegExpInfo WTime::formatSecondToRegExp(WTime::RegExpInfo& result,
   else /* Seconds with leading 0 */
     result.regexp += "([0-5][0-9])";
 
+  result.secGetJS = "return parseInt(results["
+          + boost::lexical_cast<std::string>(currentGroup++) + "], 10);";
+
   return result;
 }
 
 WTime::RegExpInfo WTime::formatMSecondToRegExp(WTime::RegExpInfo& result,
 					       const std::string& format,
-					       unsigned& i)
+                           unsigned& i, int& currentGroup)
 {
   char next = -1;
   std::string sf;
@@ -591,6 +604,9 @@ WTime::RegExpInfo WTime::formatMSecondToRegExp(WTime::RegExpInfo& result,
     result.regexp += "(0|[1-9][0-9]{0,2})";
   else if (sf == "zzz") 
     result.regexp += "([0-9]{3})";
+
+  result.msecGetJS = "return parseInt(results["
+          + boost::lexical_cast<std::string>(currentGroup++) + "], 10);";
 
   return result;
 }
@@ -642,11 +658,17 @@ WTime::RegExpInfo WTime::formatToRegExp(const WT_USTRING& format)
 {
   RegExpInfo result;
   std::string f = format.toUTF8();
+  int currentGroup = 1;
 
-  result.regexp = "^";
+  result.hourGetJS = "return 1";
+  result.minuteGetJS = "return 1";
+  result.secGetJS = "return 1";
+  result.msecGetJS = "return 1";
+
+  //result.regexp = "^";
   bool inQuote = false;
 
-  for (unsigned i = 0; i < f.size(); ++i) { 
+  for (unsigned i = 0; i < f.size(); ++i) {
     if (inQuote && f[i] != '\'') {
 	  processChar(result, f, i);
       continue;
@@ -660,16 +682,16 @@ WTime::RegExpInfo WTime::formatToRegExp(const WT_USTRING& format)
         inQuote = !inQuote;
     case 'h':
     case 'H':
-      formatHourToRegExp(result, f, i);
+      formatHourToRegExp(result, f, i, currentGroup);
       break;
     case 'm':
-      formatMinuteToRegExp(result,f, i);
+      formatMinuteToRegExp(result,f, i, currentGroup);
       break;
     case 's':
-      formatSecondToRegExp(result, f, i);
+      formatSecondToRegExp(result, f, i, currentGroup);
       break;
     case 'z':
-      formatMSecondToRegExp(result, f, i);
+      formatMSecondToRegExp(result, f, i, currentGroup);
       break;
     case 'Z':
       result.regexp+="(\\+[0-9]{4})";
@@ -689,9 +711,46 @@ WTime::RegExpInfo WTime::formatToRegExp(const WT_USTRING& format)
 
   }
 
-  result.regexp += "$";
+  //result.regexp += "$";
 
   return result;
+}
+
+bool WTime::usesAmPm(const WString& format)
+{
+  std::string f = format.toUTF8() + std::string(3, 0);
+
+  bool inQuote = false;
+  bool gotQuoteInQuote = false;
+  bool useAMPM = false;
+
+  for (unsigned i = 0; i < f.length() - 3; ++i) {
+    if (inQuote) {
+      if (f[i] != '\'') {
+	if (gotQuoteInQuote) {
+	  gotQuoteInQuote = false;
+	  inQuote = false;
+	}
+      } else {
+	if (gotQuoteInQuote)
+	  gotQuoteInQuote = false;
+	else
+	  gotQuoteInQuote = true;
+      }
+    }
+
+    if (!inQuote) {
+      if (f[i] == 'a' || f[i] == 'A') {
+	useAMPM = true;
+	break;
+      } else if (f[i] == '\'') {
+	inQuote = true;
+	gotQuoteInQuote = false;
+      }
+    }
+  }
+  
+  return useAMPM;
 }
 
 }

@@ -5,320 +5,209 @@
 #include "WPushButton"
 #include "WText"
 #include "WIcon"
-
+#include "WContainerWidget"
+#include "WSpinBox"
+#include "WTimeValidator"
+#include "WTimeEdit"
 
 namespace Wt {
 
 LOGGER("WTimePicker");
 
 WTimePicker::WTimePicker(WContainerWidget *parent)
-    : WCompositeWidget(parent), 
-	  minuteStep_(1),
-	  secondStep_(1),
+    : WCompositeWidget(parent),
       selectionChanged_(this)
 {
     init();
 }
 
 WTimePicker::WTimePicker(const WTime &time, WContainerWidget *parent)
-    : WCompositeWidget(parent),
-	minuteStep_(1),
-	secondStep_(1)
+    : WCompositeWidget(parent)
+{
+    init(time);
+}
+
+WTimePicker::WTimePicker(WTimeEdit *timeEdit, WContainerWidget *parent)
+    : WCompositeWidget(parent), timeEdit_(timeEdit)
+{
+    init();
+}
+
+WTimePicker::WTimePicker(const WTime &time, WTimeEdit *timeEdit, WContainerWidget *parent)
+    : WCompositeWidget(parent), timeEdit_(timeEdit)
 {
     init(time);
 }
 
 void WTimePicker::init(const WTime &time)
 {
-    Wt::WStringStream text;
-    text << "<table>"
-            """<tr>"
-            ""  "<th>${incrementHour}</th>"
-            ""  "<th></th>"
-            ""  "<th>${incrementMinute}</th>"
-            ""  "<th></th>"
-            ""  "<th>${incrementSecond}</th>"
-            """</tr>"
-            """<tr>"
-            ""  "<td valign=\"middle\" align=\"center\">${hourText}</td>"
-            ""  "<td valign=\"middle\" align=\"center\">:</td>"
-            ""  "<td valign=\"middle\" align=\"center\">${minuteText}</td>"
-            ""  "<td valign=\"middle\" align=\"center\">:</td>"
-            ""  "<td valign=\"middle\" align=\"center\">${secondText}</td>"
-            """</tr>"
-            """<tr>"
-            ""  "<th>${decrementHour}</th>"
-            ""  "<th></th>"
-            ""  "<th>${decrementMinute}</th>"
-            ""  "<th></th>"
-            ""  "<th>${decrementSecond}</th>"
-            """</tr>"
-            "</table>";
-
-    WTemplate *impl = new WTemplate();
-    setImplementation(impl);
-    impl->setTemplateText(WString::fromUTF8(text.str(), XHTMLUnsafeText));
-
-    WIcon::loadIconFont();
-    WPushButton *incHourButton = new WPushButton();
-    incHourButton->addStyleClass("fa fa-arrow-up");
-
-    WPushButton *decHourButton = new WPushButton();
-    decHourButton->addStyleClass("fa fa-arrow-down");
-
-    WPushButton *incMinuteButton = new WPushButton();
-    incMinuteButton->addStyleClass("fa fa-arrow-up");
-
-    WPushButton *decMinuteButton = new WPushButton();
-    decMinuteButton->addStyleClass("fa fa-arrow-down");
-    
-	WPushButton *incSecondButton = new WPushButton();
-    incSecondButton->addStyleClass("fa fa-arrow-up");
-
-    WPushButton *decSecondButton = new WPushButton();
-    decSecondButton->addStyleClass("fa fa-arrow-down");
-
-    hourText_ = new WText("0");
-    hourText_->setInline(false);
-    hourText_->setTextAlignment(AlignCenter);
-
-    minuteText_ = new WText("00");
-    minuteText_->setInline(false);
-    minuteText_->setTextAlignment(AlignCenter);
-    
-	secondText_ = new WText("00");
-    secondText_->setInline(false);
-    secondText_->setTextAlignment(AlignCenter);
-
-    impl->bindWidget("incrementHour", incHourButton);
-    impl->bindWidget("decrementHour", decHourButton);
-
-    impl->bindWidget("hourText", hourText_);
-    impl->bindWidget("minuteText", minuteText_);
-    impl->bindWidget("secondText", secondText_);
-
-    impl->bindWidget("incrementMinute", incMinuteButton);
-    impl->bindWidget("decrementMinute", decMinuteButton);
-    
-	impl->bindWidget("incrementSecond", incSecondButton);
-    impl->bindWidget("decrementSecond", decSecondButton);
-
-    incHourButton->clicked().connect(this, &WTimePicker::incrementHours);
-    decHourButton->clicked().connect(this, &WTimePicker::decrementHours);
-
-    incMinuteButton->clicked().connect(this, &WTimePicker::incrementMinutes);
-    decMinuteButton->clicked().connect(this, &WTimePicker::decrementMinutes);
-    
-	incSecondButton->clicked().connect(this, &WTimePicker::incrementSeconds);
-    decSecondButton->clicked().connect(this, &WTimePicker::decrementSeconds);
-
+    WTemplate *container = new WTemplate();
+    setImplementation(container);
+    container->addStyleClass("form-inline");
+    container->setTemplateText(tr("Wt.WTimePicker.template"));
+    createWidgets();
+    configure();
 }
 
-WTime WTimePicker::time()
+WTime WTimePicker::time() const
 {
-    int hours = 0, minutes = 0, seconds = 0;
+    int hours = 0, minutes = 0, seconds = 0, milliseconds = 0;
 
     try {
-        hours = boost::lexical_cast<int>(hourText_->text().toUTF8());
-        minutes = boost::lexical_cast<int>(minuteText_->text().toUTF8());
-        seconds = boost::lexical_cast<int>(secondText_->text().toUTF8());
+        hours = boost::lexical_cast<int>(sbhour_->text().toUTF8());
+        minutes = boost::lexical_cast<int>(sbminute_->text().toUTF8());
+        seconds = boost::lexical_cast<int>(sbsecond_->text().toUTF8());
+
+        if (formatMs())
+            milliseconds = boost::lexical_cast<int>(sbmillisecond_->text().toUTF8());
+	if (formatAp()) {
+	  if (cbAP_->currentIndex() == 1) {
+	    if (hours != 12)
+	      hours += 12;
+	  } else
+	    if (hours == 12)
+	      hours = 0;
+	}
     } catch(const boost::bad_lexical_cast& ex) {
         LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
     }
 
-    return WTime(hours, minutes, seconds);
+    return WTime(hours, minutes, seconds, milliseconds);
 }
 
 void WTimePicker::setTime(const WTime& time)
 {
-
-    if(!time.isValid()) {
+    if (!time.isValid()) {
         LOG_ERROR("Time is invalid!");
         return;
     }
 
-	std::string hoursStr("0"), minutesStr("00"), secondsStr("00");
+    int hours = 0;
 
-    try {
-        hoursStr = time.toString("hh").toUTF8();
-        minutesStr = time.toString("mm").toUTF8();
-		secondsStr = time.toString("ss").toUTF8();
-    } catch(const boost::bad_lexical_cast& ex) {
-        LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
+    if (formatAp()) {
+      hours = time.pmhour();
+
+      if (time.hour() < 12)
+	cbAP_->setCurrentIndex(0);
+      else
+	cbAP_->setCurrentIndex(1);
+    } else
+      hours = time.hour();
+
+    int minutes = time.minute();
+    int seconds = time.second();
+    int millisecond = time.msec();
+
+    sbhour_->setValue(hours);
+    sbminute_->setValue(minutes);
+    sbsecond_->setValue(seconds);
+
+    if (formatMs()) {
+        sbmillisecond_->setValue(millisecond);
     }
-
-    hourText_->setText(hoursStr);
-    minuteText_->setText(minutesStr);
-    secondText_->setText(secondsStr);
 }
 
-void WTimePicker::incrementSeconds()
+void WTimePicker::configure()
 {
-    std::string str = secondText_->text().toUTF8();
-    int curVal = 0;
-    if(!str.empty())
-    {
-        try {
-            curVal = boost::lexical_cast<int>(str);
-        } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-        }
+    WTemplate *container = dynamic_cast<WTemplate *>(implementation());
+    container->bindWidget("hour", sbhour_);
+    container->bindWidget("minute", sbminute_);
+    container->bindWidget("second", sbsecond_);
+
+    if (formatMs())
+      container->bindWidget("millisecond", sbmillisecond_);
+    else {
+      container->takeWidget("millisecond");
+      container->bindEmpty("millisecond");
     }
 
-    if((curVal += secondStep_) >= 60)
-        curVal -= 60;
-
-    try {
-        str = boost::lexical_cast<std::string>(curVal);
-        if(str.size() == 1) str = "0"+str;
-    } catch(const boost::bad_lexical_cast& ex) {
-        LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-    }
-
-    secondText_->setText(str);
-
-    selectionChanged_.emit();
+    if (formatAp()) {
+      sbhour_->setRange(1, 12);
+      container->bindWidget("ampm", cbAP_);
+    } else {
+      container->takeWidget("ampm");
+      container->bindEmpty("ampm");
+      sbhour_->setRange(0, 23);
+    }  
 }
 
-void WTimePicker::decrementSeconds()
+void WTimePicker::createWidgets()
 {
-    std::string str = secondText_->text().toUTF8();
-    int curVal = 0;
-    if(!str.empty()) {
-        try {
-            curVal = boost::lexical_cast<int>(str);
-        } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-        }
-    }
+    sbhour_ = new WSpinBox();
+    sbhour_->setWidth(70);
+    sbhour_->setSingleStep(1);
+    sbhour_->changed().connect(this, &WTimePicker::hourValueChanged);
 
-	if((curVal -= secondStep_) < 0)
-        curVal += 60;
+    sbminute_ = new WSpinBox();
+    sbminute_->setWidth(70);
+    sbminute_->setRange(0, 59);
+    sbminute_->setSingleStep(1);
+    sbminute_->changed().connect(this, &WTimePicker::minuteValueChanged);
 
-    try {
-        str = boost::lexical_cast<std::string>(curVal);
-        if(str.size() == 1) str = "0"+str;
-    } catch(const boost::bad_lexical_cast& ex) {
-	  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-    }
+    sbsecond_ = new WSpinBox();
+    sbsecond_->setWidth(70);
+    sbsecond_->setRange(0, 59);
+    sbsecond_->setSingleStep(1);
+    sbsecond_->changed().connect(this, &WTimePicker::secondValueChanged);
 
-    secondText_->setText(str);
+    sbmillisecond_ = new WSpinBox();
+    sbmillisecond_->setWidth(70);
+    sbmillisecond_->setRange(0, 999);
+    sbmillisecond_->setSingleStep(1);
+    sbmillisecond_->changed().connect(this, &WTimePicker::msecValueChanged);
 
-    selectionChanged_.emit();
+    cbAP_ = new WComboBox();
+    cbAP_->setWidth(90);
+    cbAP_->addItem("AM");
+    cbAP_->addItem("PM");
+    cbAP_->changed().connect(this, &WTimePicker::ampmValueChanged);
 }
 
-void WTimePicker::incrementMinutes()
+void WTimePicker::hourValueChanged()
 {
-    std::string str = minuteText_->text().toUTF8();
-    int curVal = 0;
-    if(!str.empty())
-    {
-        try {
-            curVal = boost::lexical_cast<int>(str);
-        } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-        }
-    }
-
-    if((curVal += minuteStep_) >= 60) 
-        curVal -= 60;
-
-    try {
-        str = boost::lexical_cast<std::string>(curVal);
-        if(str.size() == 1) str = "0"+str;
-    } catch(const boost::bad_lexical_cast& ex) {
-        LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-    }
-
-    minuteText_->setText(str);
-
-    selectionChanged_.emit();
+    if (sbhour_->validate() == Wt::WValidator::Valid)
+      selectionChanged_.emit();
 }
 
-void WTimePicker::decrementMinutes()
+void WTimePicker::minuteValueChanged()
 {
-    std::string str = minuteText_->text().toUTF8();
-    int curVal = 0;
-    if(!str.empty()) {
-        try {
-            curVal = boost::lexical_cast<int>(str);
-        } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-        }
+    if (sbminute_->validate() == Wt::WValidator::Valid){
+        selectionChanged_.emit();
     }
-
-    if((curVal -= minuteStep_) < 0)
-        curVal += 60;
-
-    try {
-        str = boost::lexical_cast<std::string>(curVal);
-        if(str.size() == 1) str = "0"+str;
-    } catch(const boost::bad_lexical_cast& ex) {
-	  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-    }
-
-    minuteText_->setText(str);
-
-    selectionChanged_.emit();
 }
 
-void WTimePicker::incrementHours()
+void WTimePicker::secondValueChanged()
 {
-    std::string str = hourText_->text().toUTF8();
-    int curVal = 0;
-    if(!str.empty()) {
-        try {
-
-            curVal = boost::lexical_cast<int>(str);
-        } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-        }
+    if (sbsecond_->validate() == Wt::WValidator::Valid){
+        selectionChanged_.emit();
     }
-
-    if((curVal + 1) < 24)
-        curVal++;
-    else
-        curVal -= 23;
-
-    try {
-        str = boost::lexical_cast<std::string>(curVal);
-        if(str.size() == 1) str = "0"+str;
-    } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-    }
-
-    hourText_->setText(str);
-
-    selectionChanged_.emit();
 }
 
-void WTimePicker::decrementHours()
+void WTimePicker::msecValueChanged()
 {
-    std::string str = hourText_->text().toUTF8();
-    int curVal = 0;
-    if(!str.empty()) {
-        try {
-            curVal = boost::lexical_cast<int>(str);
-        } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
-        }
+    if (sbmillisecond_->validate() == Wt::WValidator::Valid){
+        selectionChanged_.emit();
     }
+}
 
-    if((curVal - 1) >= 0)
-        curVal--;
-    else
-        curVal += 23;
-
-    try {
-        str = boost::lexical_cast<std::string>(curVal);
-        if(str.size() == 1) str = "0"+str;
-    } catch(const boost::bad_lexical_cast& ex) {
-		  LOG_ERROR("boost::bad_lexical_cast caught in WTimePicker::time()");
+void WTimePicker::ampmValueChanged()
+{
+    if(cbAP_->validate() == Wt::WValidator::Valid){
+        selectionChanged_.emit();
     }
+}
 
-    hourText_->setText(str);
+bool WTimePicker::formatAp() const
+{
+    return WTime::usesAmPm(timeEdit_->format());
+}
 
-    selectionChanged_.emit();
+bool WTimePicker::formatMs() const
+{
+    WT_USTRING format = timeEdit_->format();
+
+    return WTime::fromString(WTime(4, 5, 6, 123).toString(format),
+			     format).msec() == 123;
 }
 
 } // end namespace Wt

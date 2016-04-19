@@ -805,7 +805,7 @@ public:
    */
   Signal<int, WMouseEvent>& headerMouseWentUp() { return headerMouseWentUp_; }
 
-  /*! \brief Signals when scrolling.
+  /*! \brief %Signal emitted when scrolling.
    *
    *  \note Works only if ajax is available.
    */
@@ -1097,6 +1097,7 @@ private:
   int rowHeaderCount_;
   WString computedDragMimeType_;
   bool sortEnabled_;
+  WModelIndex delayedClearAndSelectIndex_;
 
   JSignal<int, int> columnWidthChanged_;
   Signal<int, WLength> columnResized_;

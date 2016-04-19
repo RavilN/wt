@@ -13,6 +13,8 @@
 
 namespace Wt {
 
+LOGGER("WAbstractToggleButton");
+
 const char *WAbstractToggleButton::CHECKED_SIGNAL = "M_checked";
 const char *WAbstractToggleButton::UNCHECKED_SIGNAL = "M_unchecked";
 
@@ -69,7 +71,12 @@ void WAbstractToggleButton::setText(const WString& text)
   if (canOptimizeUpdates() && (text == text_.text))
     return;
 
+  if (isRendered() && flags_.test(BIT_NAKED))
+    LOG_ERROR("setText() has no effect when already rendered as a naked "
+	      "checkbox (without label)");
+
   text_.setText(text);
+  flags_.reset(BIT_NAKED);
   flags_.set(BIT_TEXT_CHANGED);
   repaint(RepaintSizeAffected);
 }
@@ -181,7 +188,7 @@ void WAbstractToggleButton::updateDom(DomElement& element, bool all)
    * see WWebWidget: other attributes need not be moved.
    *
    * But -- bug #423, disabled and readonly are properties that should be
-   * kept on the interior element.
+   * kept on the interior element. And also tabindex
    */
   if (&element != input) {
     if (element.properties().find(PropertyClass) != element.properties().end())
@@ -199,6 +206,12 @@ void WAbstractToggleButton::updateDom(DomElement& element, bool all)
     if (!v.empty()) {
       input->setProperty(Wt::PropertyReadOnly, v);
       element.removeProperty(Wt::PropertyReadOnly);
+    }
+
+    v = element.getProperty(Wt::PropertyTabIndex);
+    if (!v.empty()) {
+      input->setProperty(Wt::PropertyTabIndex, v);
+      element.removeProperty(Wt::PropertyTabIndex);
     }
 
     v = input->getAttribute("title");

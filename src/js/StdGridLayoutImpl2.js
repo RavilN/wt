@@ -396,8 +396,7 @@ WT_DECLARE_WT_MEMBER
 	 DC.minSize -= sizePadding(container, dir);
      }
 
-     var preferredSize = [], minimumSize = [],
-       totalPreferredSize = 0, totalMinSize = 0, di, oi;
+     var preferredSize = [], minimumSize = [], di, oi;
 
      var measurePreferredForStretching = true, spanned = false;
 
@@ -488,8 +487,6 @@ WT_DECLARE_WT_MEMBER
 		 item.ms[dir] = wMinimum;
 	       } else
 		 wMinimum = item.ms[dir];
-	       if (wMinimum > dMinimum)
-		 dMinimum = wMinimum;
 
 	       /*
 		* if we do not have an size set, we can and should take into
@@ -572,6 +569,7 @@ WT_DECLARE_WT_MEMBER
 		     && (DC.config[di][STRETCH] > 0)
 		     && item.set[dir];
 
+
 		   if (sizeSet || stretching) 
 		     wPreferred = Math.max(wPreferred, item.ps[dir]);
 		   else 
@@ -593,6 +591,8 @@ WT_DECLARE_WT_MEMBER
 	       if (!item.span || item.span[dir] == 1) {
 		 if (wPreferred > dPreferred)
 		   dPreferred = wPreferred;
+		 if (wMinimum > dMinimum)
+		   dMinimum = wMinimum;
 	       } else
 		 spanned = true;
 	     } else {
@@ -638,7 +638,7 @@ WT_DECLARE_WT_MEMBER
      if (spanned) {
        if (debug)
 	 console.log("(before spanned) "
-		     + id + ': ' + dir + " ps " + preferredSize);
+		     + id + ': ' + dir + " ps " + preferredSize + " ms " + minimumSize);
 
        function handleOverspanned(getItemSize, sizes) {
 	 for (di = 0; di < dirCount; ++di) {
@@ -656,6 +656,9 @@ WT_DECLARE_WT_MEMBER
 		   ++count;
 		   if (DC.config[di + si][STRETCH] > 0)
 		     stretch += DC.config[di + si][STRETCH];
+
+		   if (si != 0)
+		     ps -= DC.margins[SPACING];
 		 }
 	       }
 
@@ -674,7 +677,7 @@ WT_DECLARE_WT_MEMBER
 			 portion = 1;
 
 		       if (portion > 0) {
-			 var fract = Math.round(ps / portion);
+			 var fract = Math.round(ps * (portion / count));
 			 ps -= fract; count -= portion;
 			 sizes[di + si] += fract;
 		       }
@@ -687,12 +690,25 @@ WT_DECLARE_WT_MEMBER
 	   }
 	 }
        }
-	 
+	
        handleOverspanned(function(item) { return item.ps[dir]; },
 			 preferredSize);
 
        handleOverspanned(function(item) { return item.ms[dir]; },
 			 minimumSize);
+     }
+
+
+     var totalPreferredSize = 0, totalMinSize = 0;
+
+     for (di = 0; di < dirCount; ++di) {
+       if (minimumSize[di] > preferredSize[di])
+	 preferredSize[di] = minimumSize[di];
+
+       if (minimumSize[di] > -1) {
+	 totalPreferredSize += preferredSize[di];
+	 totalMinSize += minimumSize[di];
+       }
      }
 
      var totalMargin = 0, first = true, rh = false;
@@ -718,7 +734,7 @@ WT_DECLARE_WT_MEMBER
      totalMinSize += totalMargin;
 
      if (debug)
-       console.log("measured " + id + ': ' + dir + " ps " + preferredSize);
+       console.log("measured " + id + ': ' + dir + " ps " + preferredSize + " ms " + minimumSize);
 
      DC.measures = [
 	     preferredSize,
@@ -762,7 +778,6 @@ WT_DECLARE_WT_MEMBER
       * mark the corresponding cell as dirty if the TOTAL_PREFERRED_SIZE
       * has changed (or force).
       */
-
      if (parent && parentItemWidget.id) {
        var piw = WT.$(parentItemWidget.id);
        if (piw) {
@@ -1178,9 +1193,12 @@ WT_DECLARE_WT_MEMBER
 
 	     var factor = toDistribute / totalStretch;
 
+	     var r = 0;
 	     for (di = 0; di < dirCount; ++di) {
 	       if (stretch[di] > 0) {
-		 targetSize[di] += Math.round(stretch[di] * factor);
+		 var oldr = r;
+		 r += stretch[di] * factor;
+		 targetSize[di] += Math.round(r) - Math.round(oldr);
 		 DC.stretched[di] = true;
 	       }
 	     }
@@ -1195,18 +1213,21 @@ WT_DECLARE_WT_MEMBER
 
 	   var factor;
 
-	   if (totalPreferred[category] - totalMinimum[category] > 0)
+	   if (totalPreferred[category] - totalMinimum[category] > 0) {
 	     factor = (toDistribute - totalMinimum[category])
 	       / (totalPreferred[category] - totalMinimum[category]);
-	   else
+	   } else
 	     factor = 0;
 
+	   var r = 0;
 	   for (di = 0; di < dirCount; ++di) {
 	     if (stretch[di] > 0) {
-	       var s = measures[PREFERRED_SIZE][di]
+	       var s = measures[PREFERRED_SIZE][di] 
 		 - measures[MINIMUM_SIZE][di];
-	       targetSize[di] = measures[MINIMUM_SIZE][di]
-		 + Math.round(s * factor);
+	       var oldr = r;
+	       r += s * factor;
+	       targetSize[di] = measures[MINIMUM_SIZE][di] 
+		 + Math.round(r) - Math.round(oldr);
 	     }
 	   }
 	 }
@@ -1224,18 +1245,21 @@ WT_DECLARE_WT_MEMBER
 
 	 var factor;
 
-	 if (totalPreferred[category] - totalMinimum[category] > 0)
+	 if (totalPreferred[category] - totalMinimum[category] > 0) {
 	   factor = (toDistribute - totalMinimum[category])
 	     / (totalPreferred[category] - totalMinimum[category]);
-	 else
+	 } else
 	   factor = 0;
 
+	 var r = 0;
 	 for (di = 0; di < dirCount; ++di) {
 	   if (stretch[di] == 0) {
 	     var s = measures[PREFERRED_SIZE][di]
 	       - measures[MINIMUM_SIZE][di];
+	     var oldr = r;
+	     r += s * factor;
 	     targetSize[di] = measures[MINIMUM_SIZE][di]
-	       + Math.round(s * factor);
+	       + Math.round(r) - Math.round(oldr);
 	   }
 	 }
        }
@@ -1353,14 +1377,8 @@ WT_DECLARE_WT_MEMBER
 	     if (!hidden && (setSize || ts != ps || item.layout)) {
 	       if (setCss(w, DC.size, tsm + 'px')) {
 		 /*
-		  * Setting a size cancels the built-in margin!
+		  * Setting a size no longer cancels the built-in margin!
 		  */
-		 if (!WT.isIE && (WT.hasTag(w, 'TEXTAREA') ||
-				  WT.hasTag(w, 'INPUT'))) {
-		   setCss(w, 'margin-' + DC.left, item.margin[dir]/2 + 'px');
-		   setCss(w, 'margin-' + OC.left, item.margin[!dir]/2 + 'px');
-		 }
-
 		 setItemDirty(item, 1);
 		 item.set[dir] = true;
 	       }

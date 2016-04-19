@@ -23,13 +23,15 @@ LOGGER("WTimeEdit");
 WTimeEdit::WTimeEdit(WContainerWidget *parent)
   : WLineEdit(parent)
 {
+  setValidator(new WTimeValidator(this));
   changed().connect(this, &WTimeEdit::setFromLineEdit);
   const char *TEMPLATE = "${timePicker}";
   WTemplate *t = new WTemplate(WString::fromUTF8(TEMPLATE));
   popup_ = new WPopupWidget(t, this);
   popup_->setAnchorWidget(this);
-  popup_->setTransient(true, 2);
-  timePicker_ = new WTimePicker();
+  popup_->setTransient(true);
+
+  timePicker_ = new WTimePicker(this);
   timePicker_->selectionChanged().connect(this, &WTimeEdit::setFromTimePicker);
   t->bindWidget("timePicker", timePicker_);
 
@@ -37,13 +39,15 @@ WTimeEdit::WTimeEdit(WContainerWidget *parent)
 
   escapePressed().connect(popup_, &WPopupWidget::hide);
   escapePressed().connect(this, &WWidget::setFocus);
-  setValidator(new WTimeValidator("HH:mm", this));
+
 }
 
 void WTimeEdit::setTime(const WTime& time)
 {
-  setText(time.toString(format()));
-  timePicker_->setTime(time);
+  if (!time.isNull()) {
+    setText(time.toString(format()));
+    timePicker_->setTime(time);
+  }
 }
 
 WTime WTimeEdit::time() const
@@ -63,9 +67,10 @@ void WTimeEdit::setFormat(const WT_USTRING& format)
   if (tv) {
     WTime t = this->time();
     tv->setFormat(format);
+    timePicker_->configure();
     setTime(t);
   } else
-    LOG_WARN("setFormaT() ignored since validator is not WTimeValidator");
+    LOG_WARN("setFormat() ignored since validator is not WTimeValidator");
 }
 
 WT_USTRING WTimeEdit::format() const
@@ -78,6 +83,36 @@ WT_USTRING WTimeEdit::format() const
     LOG_WARN("format() is bogus since validator is not WTimeValidator.");
     return WT_USTRING();
   }
+}
+
+void WTimeEdit::setBottom(const WTime &bottom)
+{
+    WTimeValidator *tv = validator();
+    if(tv)
+        tv->setBottom(bottom);
+}
+
+WTime WTimeEdit::bottom() const
+{
+    WTimeValidator *tv = validator();
+    if(tv)
+        return tv->bottom();
+    return WTime();
+}
+
+void WTimeEdit::setTop(const WTime &top)
+{
+    WTimeValidator *tv = validator();
+    if(tv)
+        tv->setTop(top);
+}
+
+WTime WTimeEdit::top() const
+{
+    WTimeValidator *tv = validator();
+    if(tv)
+        return tv->top();
+    return WTime();
 }
 
 void WTimeEdit::setHidden(bool hidden, const WAnimation& animation)
@@ -102,12 +137,12 @@ void WTimeEdit::propagateSetEnabled(bool enabled)
 void WTimeEdit::setFromTimePicker()
 {
   setTime(timePicker_->time());
+  changed().emit();
 }
 
 void WTimeEdit::setFromLineEdit()
 {
   WTime t = WTime::fromString(text(), format());
-
   if (t.isValid())
     timePicker_->setTime(t);
 }

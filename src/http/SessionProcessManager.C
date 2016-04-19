@@ -78,11 +78,13 @@ bool SessionProcessManager::tryToIncrementSessionCount()
   if (numSessions_ + 1 > configuration_.maxNumSessions()) {
     return false;
   }
-  ++ numSessions_;
+
+  ++numSessions_;
   return true;
 }
 
-const boost::shared_ptr<SessionProcess>& SessionProcessManager::sessionProcess(std::string sessionId)
+const boost::shared_ptr<SessionProcess>&
+SessionProcessManager::sessionProcess(std::string sessionId)
 {
 #ifdef WT_THREADED
   boost::mutex::scoped_lock lock(sessionsMutex_);
@@ -99,6 +101,7 @@ void SessionProcessManager::addPendingSessionProcess(const boost::shared_ptr<Ses
 #ifdef WT_THREADED
   boost::mutex::scoped_lock lock(sessionsMutex_);
 #endif // WT_THREADED
+  LOG_DEBUG("addPendingSessionProcess()");
   pendingProcesses_.push_back(process);
 }
 
@@ -107,6 +110,7 @@ void SessionProcessManager::addSessionProcess(std::string sessionId, const boost
 #ifdef WT_THREADED
   boost::mutex::scoped_lock lock(sessionsMutex_);
 #endif // WT_THREADED
+  LOG_DEBUG("addSessionProcess()" << sessionId);
   for (SessionProcessList::iterator it = pendingProcesses_.begin();
        it != pendingProcesses_.end(); ++it) {
     if (process == *it) {
@@ -145,6 +149,8 @@ void SessionProcessManager::processDeadChildren(boost::system::error_code ec)
       LOG_ERROR("Error processing dead children: " << ec.message());
     return;
   }
+
+  LOG_DEBUG("SessionProcessManager::processDeadChildren()");
 
 #ifndef WT_WIN32
   pid_t cpid;

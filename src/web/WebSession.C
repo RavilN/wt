@@ -364,7 +364,10 @@ void WebSession::setState(State state, int timeout)
 
 std::string WebSession::sessionQuery() const
 {
-  return "?wtd=" + DomElement::urlEncodeS(sessionId_);
+  std::string result ="?wtd=" + DomElement::urlEncodeS(sessionId_);
+  if (type() == WidgetSet)
+    result += "&wtt=widgetset";
+  return result;
 }
 
 void WebSession::init(const WebRequest& request)
@@ -957,6 +960,8 @@ ApplicationEvent WebSession::popQueuedEvent()
 
   ApplicationEvent result;
 
+  LOG_DEBUG("popQueuedEvent(): " << eventQueue_.size());
+
   if (!eventQueue_.empty()) {
     result = eventQueue_.front();
     eventQueue_.pop_front();
@@ -980,6 +985,8 @@ void WebSession::queueEvent(const ApplicationEvent& event)
 #endif // WT_BOOST_THREADS
 
   eventQueue_.push_back(event);
+
+  LOG_DEBUG("queueEvent(): " << eventQueue_.size());
 
 #ifdef WT_TARGET_JAVA
   eventQueueMutex_.unlock();
@@ -2794,15 +2801,14 @@ void WebSession::notifySignal(const WEvent& e)
     if (!signalE)
       return;
 
-    renderer_.setRendered(true);
-
     LOG_DEBUG("signal: " << *signalE);
+
+    if (type() != WidgetSet ||
+	(*signalE != "none" && *signalE != "load"))
+      renderer_.setRendered(true);
 
     if (*signalE == "none" || *signalE == "load") {
       if (*signalE == "load") {
-	if (type() == WidgetSet)
-	  renderer_.setRendered(false);
-
 	if (!renderer_.checkResponsePuzzle(request))
 	  app_->quit();
 	else

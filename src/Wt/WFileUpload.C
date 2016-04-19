@@ -65,20 +65,40 @@ protected:
       "function load() { ";
 
     if (triggerUpdate || request.tooLarge()) {
+      WEnvironment::UserAgent agent =
+          WApplication::instance()->environment().agent();
+
       if (triggerUpdate) {
-	LOG_DEBUG("Resource handleRequest(): signaling uploaded");
+        LOG_DEBUG("Resource handleRequest(): signaling uploaded");
 
-	o << "window.parent.postMessage("
-	  << "{ fu: '" << fileUpload_->id() << "',"
-	  << "  signal: '"
-	  << fileUpload_->uploaded().encodeCmd() << "'}, '*');";
+        // postMessage does not work for IE6,7
+        if (agent == WEnvironment::IE6 || agent == WEnvironment::IE7){
+          o << "window.parent."
+            << WApplication::instance()->javaScriptClass()
+            << "._p_.update(null, '"
+            << fileUpload_->uploaded().encodeCmd() << "', null, true);";
+        } else {
+          o << "window.parent.postMessage("
+            << "JSON.stringify({ fu: '" << fileUpload_->id() << "',"
+            << "  signal: '"
+            << fileUpload_->uploaded().encodeCmd()
+            << "',type: 'upload'"
+            << "}), '*');";
+        }
       } else if (request.tooLarge()) {
-	LOG_DEBUG("Resource handleRequest(): signaling file-too-large");
+        LOG_DEBUG("Resource handleRequest(): signaling file-too-large");
 
-	o << "window.parent.postMessage("
-	  << "{ fu: '" << fileUpload_->id() << "',"
-	  << "  signal: '"
-	  << fileUpload_->fileTooLargeImpl().encodeCmd() << "'}, '*');";
+	// FIXME this should use postMessage() all the same
+
+        std::string s = boost::lexical_cast<std::string>(request.tooLarge());
+
+        // postMessage does not work for IE6,7
+        if (agent == WEnvironment::IE6 || agent == WEnvironment::IE7)
+          o << fileUpload_->fileTooLarge().createCall(s);
+        else
+          o << " window.parent.postMessage("
+            << "JSON.stringify({" << "fileTooLargeSize: '" << s
+            << "',type: 'file_too_large'" << "'}), '*');";
       }
     } else {
       LOG_DEBUG("Resource handleRequest(): no signal");
@@ -88,11 +108,8 @@ protected:
       "</script></head>"
       "<body onload=\"load();\"></body></html>";
 
-    if (request.tooLarge())
-      fileUpload_->tooLargeSize_ = request.tooLarge();
-    else
-      if (!files.empty())
-	fileUpload_->setFiles(files);
+    if (!request.tooLarge() && !files.empty())
+      fileUpload_->setFiles(files);
   }
 
 private:
@@ -101,7 +118,6 @@ private:
 
 const char *WFileUpload::CHANGE_SIGNAL = "M_change";
 const char *WFileUpload::UPLOADED_SIGNAL = "M_uploaded";
-const char *WFileUpload::FILETOOLARGE_SIGNAL = "M_filetoolarge";
 
 /*
  * Supporting the file API:
@@ -113,13 +129,11 @@ const char *WFileUpload::FILETOOLARGE_SIGNAL = "M_filetoolarge";
 WFileUpload::WFileUpload(WContainerWidget *parent)
   : WWebWidget(parent),
     textSize_(20),
-    fileTooLarge_(this),
+    fileTooLarge_(this, "fileTooLarge"),
     dataReceived_(this),
-    progressBar_(0),
-    tooLargeSize_(0)
+    progressBar_(0)
 {
   setInline(true);
-  fileTooLargeImpl().connect(this, &WFileUpload::handleFileTooLargeImpl);
   create();
 }
 
@@ -171,10 +185,11 @@ void WFileUpload::onData(::uint64_t current, ::uint64_t total)
   h->setRequest(0, 0); // so that triggerUpdate() will work
 
   if (dataExceeded) {
+    doJavaScript(WT_CLASS ".$('if" + id() + "').src='"
+                  + fileUploadTarget_->url() + "';");
     if (flags_.test(BIT_UPLOADING)) {
       flags_.reset(BIT_UPLOADING);
-      tooLargeSize_ = dataExceeded;
-      handleFileTooLargeImpl();
+      handleFileTooLarge(dataExceeded);
 
       WApplication *app = WApplication::instance();
       app->triggerUpdate();
@@ -229,14 +244,9 @@ EventSignal<>& WFileUpload::changed()
   return *voidEventSignal(CHANGE_SIGNAL, true);
 }
 
-EventSignal<>& WFileUpload::fileTooLargeImpl()
+void WFileUpload::handleFileTooLarge(::int64_t fileSize)
 {
-  return *voidEventSignal(FILETOOLARGE_SIGNAL, true);
-}
-
-void WFileUpload::handleFileTooLargeImpl()
-{
-  fileTooLarge().emit(tooLargeSize_);
+  fileTooLarge().emit(fileSize);
 }
 
 void WFileUpload::setFileTextSize(int chars)
@@ -306,7 +316,30 @@ void WFileUpload::updateDom(DomElement& element, bool all)
     // Reset the action and generate a new URL for the target,
     // because the session id may have changed in the meantime
     element.setAttribute("action", fileUploadTarget_->generateUrl());
-    element.callMethod("submit()");
+
+    std::string maxFileSize =
+        boost::lexical_cast<std::string>(
+          WApplication::instance()->maximumRequestSize());
+
+    std::string command =
+      "{"
+      """var submit = true;"
+      """var x = " WT_CLASS ".$('in" + id() + "');"
+      """if (x.files != null) {"
+      ""  "for (var i = 0; i < x.files.length; i++) {"
+      ""    "var f = x.files[i];"
+      ""      "if (f.size > " + maxFileSize + ") {"
+      ""        "submit = false;"
+      ""       + fileTooLarge().createCall("f.size") + ";"
+      ""        "break;"
+      ""      "}"
+      ""    "}"
+      """}"
+      """if (submit)"
+      ""  + jsRef() + ".submit(); "
+      "}";
+
+    element.callJavaScript(command);
     flags_.reset(BIT_DO_UPLOAD);
 
     if (containsProgress) {
@@ -425,13 +458,23 @@ DomElement *WFileUpload::createDomElement(WApplication *app)
 
     form->addChild(input);
 
-    doJavaScript("window.addEventListener('message', function(event) {"
-		 """if (" + jsRef() + ".action.indexOf(event.origin) === 0) {"
-		 ""  "if (event.data.fu == '" + id() + "')"
-		 +      app->javaScriptClass()
-		 +      "._p_.update(null, event.data.signal, null, true);"
+    doJavaScript("var a" + id() + "=" + jsRef() + ".action;"
+		 "var f = function(event) {"
+		 """if (a" + id() + ".indexOf(event.origin) === 0) {"
+		 ""  "var data = JSON.parse(event.data);"
+     ""  "if (data.type === 'upload') {"
+     ""    "if (data.fu == '" + id() + "')"
+     +        app->javaScriptClass()
+     +        "._p_.update(null, data.signal, null, true);"
+     ""  "} else if (data.type === 'file_too_large')"
+     ""    + fileTooLarge().createCall("data.fileTooLargeSize") +
 		 """}"
-		 "}, false);");
+		 "};"
+		 "if (window.addEventListener) "
+		 """window.addEventListener('message', f, false);"
+		 "else "
+		 """window.attachEvent('onmessage', f);"
+		 );
   } else {
     result->setAttribute("type", "file");
     if (flags_.test(BIT_MULTIPLE))
@@ -480,13 +523,14 @@ void WFileUpload::upload()
 {
   if (fileUploadTarget_ && !flags_.test(BIT_UPLOADING)) {
     flags_.set(BIT_DO_UPLOAD);
+
     repaint();
 
     if (progressBar_) {
       if (progressBar_->parent() != this)
-	hide();
+  hide();
       else
-	progressBar_->show();
+  progressBar_->show();
     }
 
     WApplication::instance()->enableUpdates();

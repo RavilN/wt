@@ -32,7 +32,8 @@ namespace Wt {
 namespace http {
 namespace server {
 
-static const int CONNECTION_TIMEOUT = 120; // 2 minutes
+static const int CONNECTION_TIMEOUT = 300; // 5 minutes
+static const int BODY_TIMEOUT = 600;       // 10 minutes
 static const int KEEPALIVE_TIMEOUT  = 10;  // 10 seconds
 
 Connection::Connection(asio::io_service& io_service, Server *server,
@@ -275,17 +276,25 @@ void Connection::handleError(const asio_error_code& e)
 
 void Connection::handleReadBody(ReplyPtr reply)
 {
-  haveResponse_ = false;
-  waitingResponse_ = true;
+  if (request_.type != Request::WebSocket) {
+    /*
+     * For a WebSocket: reading and writing may happen in parallel,
+     * And writing and reading is asynchronous (post() from within
+     * WtReply::consumeWebSocketMessage()
+     */
+    haveResponse_ = false;
+    waitingResponse_ = true;
+  }
 
   RequestParser::ParseResult result = request_parser_
     .parseBody(request_, reply, rcv_remaining_,
 	       rcv_buffers_.back().data() + rcv_buffer_size_);
 
-  waitingResponse_ = false;
+  if (request_.type != Request::WebSocket)
+    waitingResponse_ = false;
 
   if (result == RequestParser::ReadMore) {
-    readMore(reply, CONNECTION_TIMEOUT);
+    readMore(reply, BODY_TIMEOUT);
   } else if (result == RequestParser::Done && haveResponse_)
     startWriteResponse(reply);
 }
@@ -386,7 +395,7 @@ void Connection::startWriteResponse(ReplyPtr reply)
 	    << buffers.size() << ")");
 
   if (!buffers.empty()) {
-    startAsyncWriteResponse(reply, buffers, CONNECTION_TIMEOUT);
+    startAsyncWriteResponse(reply, buffers, BODY_TIMEOUT);
   } else {
     cancelWriteTimer();
     handleWriteResponse(reply);

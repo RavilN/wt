@@ -323,6 +323,8 @@ void WAbstractItemView::setModel(WAbstractItemModel *model)
   selectionModel_->setSelectionBehavior(oldSelectionModel->selectionBehavior());
   delete oldSelectionModel;
 
+  delayedClearAndSelectIndex_ = WModelIndex();
+
   editedItems_.clear();
 
   if (!isReset)
@@ -946,8 +948,14 @@ void WAbstractItemView::selectionHandleClick(const WModelIndex& index,
       extendSelection(index);
     else {
       if (!(modifiers & (ControlModifier | MetaModifier))) {
-	if (!isSelected(index))
+	if (!dragEnabled_)
 	  select(index, ClearAndSelect);
+	else {
+	  if (!isSelected(index))
+	    select(index, ClearAndSelect);
+	  else
+	    delayedClearAndSelectIndex_ = index;
+	}
       } else
 	select(index, ToggleSelect);
     }
@@ -1309,9 +1317,12 @@ void WAbstractItemView::expandColumn(int columnid)
 void WAbstractItemView::handleClick(const WModelIndex& index,
 				    const WMouseEvent& event)
 {
-  bool doEdit = index.isValid() && 
-    (((editTriggers() & SelectedClicked) && isSelected(index)) ||
-     (editTriggers() & SingleClicked));
+  if (dragEnabled_ && delayedClearAndSelectIndex_.isValid() &&
+      event.dragDelta().x < 4 && event.dragDelta().y < 4) {
+    select(delayedClearAndSelectIndex_, ClearAndSelect);
+  }
+
+  bool doEdit = index.isValid() && (editTriggers() & SingleClicked);
 
   if (doEdit)
     edit(index);
@@ -1332,8 +1343,16 @@ void WAbstractItemView::handleDoubleClick(const WModelIndex& index,
 void WAbstractItemView::handleMouseDown(const WModelIndex& index,
 					const WMouseEvent& event)
 {
-  if (index.isValid())
+  bool doEdit = index.isValid() &&
+    (editTriggers() & SelectedClicked) && isSelected(index);
+
+  delayedClearAndSelectIndex_ = WModelIndex();
+
+  if (index.isValid() && event.button() == WMouseEvent::LeftButton)
     selectionHandleClick(index, event.modifiers());
+
+  if (doEdit)
+    edit(index);
 
   mouseWentDown_.emit(index, event);
 }
