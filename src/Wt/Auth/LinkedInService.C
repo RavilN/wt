@@ -4,6 +4,7 @@
 #include "Wt/Json/Parser"
 #include "Wt/Http/Client"
 #include "Wt/Json/Serializer"
+#include <string>
 #define ERROR_MSG(e) WString::tr("Wt.Auth.LinkedInService." e)
 
 namespace {
@@ -100,8 +101,8 @@ namespace Auth {
           else
           {
             std::string name = me.get("firstName");
-            name += " ";
-            name += me.get("lastName");
+            name += std::string(" ");
+            name += std::string(me.get("lastName"));
             authenticated().emit(Identity(service().name(), id, name, email, true));
           }
         }
@@ -131,7 +132,7 @@ namespace Auth {
     try
     {
       std::string propertyValue = configurationProperty(LinkedInPopupWidthProperty);
-      popupDialogWidth = std::stoi(propertyValue);
+      popupDialogWidth = atoi(propertyValue.c_str());
     }
     catch (Wt::WException* e) 
     {    	
@@ -140,7 +141,7 @@ namespace Auth {
     try
     {
       std::string propertyValue = configurationProperty(LinkedInPopupHeightProperty);
-      popupDialogHeight = std::stoi(propertyValue);
+      popupDialogHeight = atoi(propertyValue.c_str());
     }
     catch (Wt::WException* e)
     {

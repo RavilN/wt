@@ -260,6 +260,7 @@ Wt/Auth/AuthWidget.C
 Wt/Auth/FacebookService.C
 Wt/Auth/FormBaseModel.C
 Wt/Auth/GoogleService.C
+Wt/Auth/LinkedInService.C
 Wt/Auth/HashFunction.C
 Wt/Auth/Identity.C
 Wt/Auth/Login.C
